@@ -63,6 +63,7 @@ if you want to help.
 ## Maintainers
 * [@axic](https://github.com/axic)
 * [@chriseth](https://github.com/chriseth)
+* [@zachwylde00](https://github.com/zachwylde00)
 
 ## License
 Solidity is licensed under [GNU General Public License v3.0](LICENSE.txt).
