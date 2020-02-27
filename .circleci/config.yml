@@ -12,6 +12,8 @@
 #     - t: test
 #     - ubu: ubuntu
 #     - ems: Emscripten
+#     - $ git config --global core.autocrlf input
+# Configure Git to ensure line endings in files you checkout are correct for Linux
 version: 2
 
 defaults:
