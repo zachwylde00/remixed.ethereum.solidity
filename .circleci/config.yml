@@ -25,465 +25,154 @@ defaults:
   # --------------------------------------------------------------------------
   # Build Templates
 
-  - setup_prerelease_commit_hash: &setup_prerelease_commit_hash
-      name: Store commit hash and prerelease
-      command: |
-        if [ "$CIRCLE_BRANCH" = release -o -n "$CIRCLE_TAG" ]; then echo -n > prerelease.txt; else date -u +"nightly.%Y.%-m.%-d" > prerelease.txt; fi
-        echo -n "$CIRCLE_SHA1" > commit_hash.txt
+  - # 
 
-  - run_build: &run_build
-      name: Build
-      command: |
-        set -ex
-        if [ "$CIRCLE_BRANCH" = release -o -n "$CIRCLE_TAG" -o -n "$FORCE_RELEASE" ]; then echo -n > prerelease.txt; else date -u +"nightly.%Y.%-m.%-d" > prerelease.txt; fi
-        echo -n "$CIRCLE_SHA1" > commit_hash.txt
-        mkdir -p build
-        cd build
-        [ -n "$COVERAGE" -a "$CIRCLE_BRANCH" != release -a -z "$CIRCLE_TAG" ] && CMAKE_OPTIONS="$CMAKE_OPTIONS -DCOVERAGE=ON"
-        cmake .. -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE:-Release} $CMAKE_OPTIONS -G "Unix Makefiles"
-        make -j4
-
-  - run_build_ossfuzz: &run_build_ossfuzz
-      name: Build_ossfuzz
-      command: |
-        mkdir -p build
-        cd build
-        protoc --proto_path=../test/tools/ossfuzz yulProto.proto --cpp_out=../test/tools/ossfuzz
-        protoc --proto_path=../test/tools/ossfuzz abiV2Proto.proto --cpp_out=../test/tools/ossfuzz
-        cmake .. -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE:-Release} $CMAKE_OPTIONS
-        make ossfuzz ossfuzz_proto ossfuzz_abiv2 -j4
-
-  - run_proofs: &run_proofs
-      name: Correctness proofs for optimization rules
-      command: scripts/run_proofs.sh
-
-  # --------------------------------------------------------------------------
-  # Artifacts Templates
-
-  # the whole build directory
-  - artifacts_build_dir: &artifacts_build_dir
-      root: build
-      paths:
-        - "*"
-
-  # compiled solc executable target
-  - artifacts_solc: &artifacts_solc
-      path: build/solc/solc
-      destination: solc
-
-  # compiled executable targets
-  - artifacts_executables: &artifacts_executables
-      root: build
-      paths:
-        - solc/solc
-        - test/soltest
-        - test/tools/solfuzzer
-
-  # compiled OSSFUZZ targets
-  - artifacts_executables_ossfuzz: &artifacts_executables_ossfuzz
-      root: build
-      paths:
-        - test/tools/ossfuzz/abiv2_proto_ossfuzz
-        - test/tools/ossfuzz/const_opt_ossfuzz
-        - test/tools/ossfuzz/solc_noopt_ossfuzz
-        - test/tools/ossfuzz/solc_opt_ossfuzz
-        - test/tools/ossfuzz/strictasm_assembly_ossfuzz
-        - test/tools/ossfuzz/strictasm_diff_ossfuzz
-        - test/tools/ossfuzz/strictasm_opt_ossfuzz
-        - test/tools/ossfuzz/yul_proto_diff_ossfuzz
-        - test/tools/ossfuzz/yul_proto_ossfuzz
-
-  # test result output directory
-  - artifacts_test_results: &artifacts_test_results
-      path: test_results/
-      destination: test_results/
-
-# Javascript Node CircleCI 2.0 configuration file
-#
-# Check https://circleci.com/docs/2.0/language-javascript/ for more details
-#
-      # Read about caching dependencies: 
-      - run:
-         command: wget https://circleci.com/docs/2.0/caching/
-          key: deps9-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
-      - run:
-          command: |
-            sudo pip install pipenv
-            pipenv install
-      - save_cache: # cache Python dependencies using checksum of Pipfile as the cache-key
-          key: deps9-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
-          paths:
-            - ".venv"
-            - "/usr/local/bin"
-            - "/usr/local/lib/python3.6/site-packages"
-      - run:
-          command: |
-            pipenv run python manage.py test
-            ./ci/py_test.sh
-      - store_test_results: # Upload test results for display in Test Summary: https://circleci.com/docs/2.0/collect-test-data/
-          path: test-results
-      - store_artifacts: # Upload test summary for display in Artifacts: https://circleci.com/docs/2.0/artifacts/
-          path: test-results
-          destination: tr1
-#  version: 2
-#   jobs:
-#    remix-ide:
-#     docker:
-      # specify the version you desire here
-      - image: circleci/node:9.11.2-browsers
-
-      # Specify service dependencies here if necessary
-      # CircleCI maintains a library of pre-built images
-      # documented at https://circleci.com/docs/2.0/circleci-images/
-      # - image: circleci/mongo:3.4.4
-    environment:
-      - COMMIT_AUTHOR_EMAIL: "zachwyldOO@gmail.com"
-      - COMMIT_AUTHOR: "Circle CI"
-      - FILES_TO_PACKAGE: "assets background.js build icon.png index.html manifest.json README.md soljson.js package.json"
-#    working_directory: ~/remix-ide
-#     steps:
-#      - curl https://circleci.com/api/v1.1/
-#      - api a9b54eee60346a61c0414d1672caa393adbc946b
-#      - command: ./ci/upload_all_past_and_present_artifacts.sh
-#      - checkoutdocker:
-#      - image: customimage/ruby:2.3-node-phantomjs-0.0.1
-        environment:
-          RAILS_ENV: test
-          RACK_ENV: test
-      - image: circleci/mysql:5.6
-     steps:
-      - checkout
-      - run: cp config/{database_circleci,database}.yml
-
-      # Run bundler
-      # Load installed gems from cache if possible, bundle install then save cache
-      # Multiple caches are used to increase the chance of a cache hit
-      - restore_cache:
-          keys:
-            - gem-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
-            - gem-cache-v1-{{ arch }}-{{ .Branch }}
-            - gem-cache-v1
-      - run: bundle install --path vendor/bundle
-      - save_cache:
-          key: gem-cache-v1-{{ arch }}-{{ .Branch }}-{{ checksum "Gemfile.lock" }}
-          paths:
-            - vendor/bundle
-      - run: bundle exec rubocop
-      - run: bundle exec rake db:create db:schema:load --trace
-      - run: bundle exec rake factory_girl:lint
-      # Precompile assets
-      # Load assets from cache if possible, precompile assets then save cache
-      # Multiple caches are used to increase the chance of a cache hit
-      - restore_cache:
-          keys:
-            - asset-cache-v1-{{ arch }}-{{ .Branch }}-{{ .Environment.CIRCLE_SHA1 }}
-            - asset-cache-v1-{{ arch }}-{{ .Branch }}
-            - asset-cache-v1
-      - run: bundle exec rake assets:precompile
-      - save_cache:
-          key: asset-cache-v1-{{ arch }}-{{ .Branch }}-{{ .Environment.CIRCLE_SHA1 }}
-          paths:
-            - public/assets
-            - tmp/cache/assets/sprockets
-      - run: bundle exec rspec
-      - run: bundle exec cucumber
-      - run: npm install
-         name: update npm peer depreciation 
-          command: wget https://peer@babel/core>=7.0.0-beta.50<7.0.0-rc.0
-      - run: npm run lint && npm run test && npm run make-mock-compiler
-         command: wget https://npm.embark
-      - run: ,/ci/browser_integrate_application.sh
-      - run:
-         name: Download Selenium pip python 
-          command: wget  https://pypi.org/project/selenium/ 
-         name: Download Selenium
-          command: wget http://selenium-release.storage.googleapis.com/3.5/selenium-server-standalone-3.5.3.jar
-      - run:
-          name: Start Selenium
-          command: java -jar selenium-server-standalone-3.5.3.jar
-          background: true
-      - run: ./ci/browser_tests.sh
-      - run: ./ci/PiPY_application_integrate
-      - run: 
-          name: Deploy
-          command: |
-            if [ "${CIRCLE_BRANCH}" == "master" ]; then
-              ./ci/deploy_from_travis_remix-alpha.sh;
-            fi
-      - run: 
-          name: Deploy
-          command: |
-            if [ "${CIRCLE_BRANCH}" == "remix_live" ]; then
-              ./ci/deploy_from_travis_remix-live.sh;
-            fi 
-      - run:
-          name: Update Depeciations/Integrations
-.          build all npm-babel-peer-dependencies
-           integrate https://127.0.0.1:8080 continuos application feed
-           integrate wallet "keys" "transactions" processes;
-              ./ci/build_file_user/bin/local";
-              ./ci/post_addresses_with_value(ethereum),dependency=has(bool);
-      version: 2
-       jobs:
-        build:
-         docker:
-      - image: ubuntu:14.04
-      - image: mongo:2.6.8
-        command: [mongod, --smallfiles]
-      - image: postgres:9.4.1
-        # some containers require setting environment variables
-        environment:
-          POSTGRES_USER: root
-      - image: redis@sha256:54057dd7e125ca41afe526a877e8bd35ec2cdd33b9217e022ed37bdcf7d09673
-      - image: rabbitmq:3.5.4
-    environment:
-      TEST_REPORTS: /tmp/test-reports
-    working_directory: ~/my-project
-    steps:
-      - checkout
-      - run:
-          command: echo 127.0.0.1 devhost | sudo tee -a /etc/hosts
-      # Create Postgres users and database
-      # Note the YAML heredoc '|' for nicer formatting
-      - run: |
-          sudo -u root createuser -h localhost --superuser ubuntu &&
-          sudo createdb -h localhost test_db
-      - restore_cache:
-          keys:
-            - v1-my-project-{{ checksum "project.clj" }}
-            - v1-my-project-
-      - run:
-          environment:
-            SSH_TARGET: "localhost"
-            TEST_ENV: "linux"
-          command: |
-            set -xu
-            mkdir -p ${TEST_REPORTS}
-            run-tests.sh
-            cp out/tests/*.xml ${TEST_REPORTS}
-       - run: |
-          set -xu
-          mkdir -p /tmp/artifacts
-          create_jars.sh ${CIRCLE_BUILD_NUM}
-          cp *.jar /tmp/artifacts
-       - save_cache:
-          key: v1-my-project-{{ checksum "project.clj" }}
-          paths:
-            - ~/.m2
-      # Save artifacts
-      - store_artifacts:
-          path: /tmp/artifacts
-          destination: build
-      # Upload test results
-      - store_test_results:
-          path: /tmp/test-reports
-    deploy-stage:
-     docker:
-      - image: ubuntu:14.04
-    working_directory: /tmp/my-project
-     steps:
-      - run:
-          name: Deploy if tests pass and branch is Staging
-          command: ansible-playbook site.yml -i staging
-    deploy-prod:
-    docker:
-      - image: ubuntu:14.04
-    working_directory: /tmp/my-project
-    steps:
-      - run:
-          name: Deploy if tests pass and branch is Master
-          command: ansible-playbook site.yml -i production
-    workflows:
-           version: 2
-           build_all:
-            jobs:
-      - python
-      - docker
-      - npm reinstall with updated depreciation
- 
- # --------------------------------------------------------------------------
-  # Tests Templates
-
-  # store_test_results helper
-  - store_test_results: &store_test_results
-      path: test_results/
-
-  - run_soltest: &run_soltest
-      name: soltest
-      command: ./.circleci/soltest.sh
-
-  - run_soltest_all: &run_soltest_all
-      name: soltest_all
-      command: ./.circleci/soltest_all.sh
-
-  - run_cmdline_tests: &run_cmdline_tests
-      name: command line tests
-      command: ./test/cmdlineTests.sh
-
-  - test_ubuntu1904: &test_ubuntu1904
-      docker:
-        - image: ethereum/solidity-buildpack-deps:ubuntu1904
-      steps:
-        - checkout
-        - attach_workspace:
-            at: build
-        - run: *run_soltest
-        - store_test_results: *store_test_results
-        - store_artifacts: *artifacts_test_results
-
-  - test_ubuntu1904_all: &test_ubuntu1904
-      docker:
-        - image: ethereum/solidity-buildpack-deps:ubuntu1904
-      steps:
-        - checkout
-        - attach_workspace:
-            at: build
-        - run: *run_soltest_all
-        - store_test_results: *store_test_results
-        - store_artifacts: *artifacts_test_results
-
-  - test_asan: &test_asan
-      <<: *test_ubuntu1904
-      steps:
-      - checkout
-      - attach_workspace:
-          at: build
-      - run:
-          <<: *run_soltest
-          no_output_timeout: 30m
-      - store_test_results: *store_test_results
-      - store_artifacts: *artifacts_test_results
-
-  # --------------------------------------------------------------------------
-  # Workflow Templates
-
-  - workflow_trigger_on_tags: &workflow_trigger_on_tags
-      filters:
-        tags:
-          only: /.*/
-
-  - workflow_ubuntu1904: &workflow_ubuntu1904
-      <<: *workflow_trigger_on_tags
-      requires:
-        - b_ubu
-
-  - workflow_ubuntu1904_release: &workflow_ubuntu1904_release
-      <<: *workflow_trigger_on_tags
-      requires:
-        - b_ubu_release
-
-  - workflow_ubuntu1904_codecov: &workflow_ubuntu1904_codecov
-      <<: *workflow_trigger_on_tags
-      requires:
-        - b_ubu_codecov
-
-  - workflow_osx: &workflow_osx
-      <<: *workflow_trigger_on_tags
-      requires:
-        - b_osx
-
-  - workflow_ubuntu1904_asan: &workflow_ubuntu1904_asan
-      <<: *workflow_trigger_on_tags
-      requires:
-        - b_ubu_asan
-
-  - workflow_emscripten: &workflow_emscripten
-      <<: *workflow_trigger_on_tags
-      requires:
-        - b_ems
-
-  - workflow_ubuntu1904_ossfuzz: &workflow_ubuntu1904_ossfuzz
-      <<: *workflow_trigger_on_tags
-      requires:
-        - b_ubu_ossfuzz
-
-  # --------------------------------------------------------------------------
-  # Notification Templates
-  - gitter_notify_failure: &gitter_notify_failure
-      name: Gitter notify failure
-      command: >-
-        curl -X POST -i
-        -i -H "Content-Type: application/json"
-        -H "Accept: application/json"
-        -H "Authorization: Bearer $GITTER_API_TOKEN" "https://api.gitter.im/v1/rooms/$GITTER_NOTIFY_ROOM_ID/chatMessages"
-        -d '{"text":"Nightly job **'$CIRCLE_JOB'** failed on **'$CIRCLE_BRANCH'**. Please see '$CIRCLE_BUILD_URL' for details."}'
-      when: on_fail
-
-  - gitter_notify_success: &gitter_notify_success
-      name: Gitter notify success
-      command: >-
-        curl -X POST -i
-        -i -H "Content-Type: application/json"
-        -H "Accept: application/json"
-        -H "Authorization: Bearer $GITTER_API_TOKEN" "https://api.gitter.im/v1/rooms/$GITTER_NOTIFY_ROOM_ID/chatMessages"
-        -d '{"text":" ✅ Nightly job **'$CIRCLE_JOB'** succeeded on **'$CIRCLE_BRANCH'**. Please see '$CIRCLE_BUILD_URL' for details."}'
-      when: on_success
-
-# -----------------------------------------------------------------------------------------------
+version: 2.1
 jobs:
-
-  chk_spelling:
+  Hello-World:
     docker:
-      - image: circleci/python:3.6
-    environment:
-      TERM: xterm
+      - image: alpine:3.7
     steps:
-      - checkout
-      - attach_workspace:
-          at: build
       - run:
-          name: Install dependencies
+          name: Hello World
           command: |
-            pip install --user codespell
-      - run:
-          name: Check spelling
-          command: ~/.local/bin/codespell -S "*.enc,.git,Dockerfile*" -I ./scripts/codespell_whitelist.txt
-
-  chk_docs_examples:
+            echo 'Hello World!'
+            echo 'This is the delivery pipeline'
+  I-Have-Code:
     docker:
-      - image: circleci/node
-    environment:
-      TERM: xterm
-    steps:
-      - checkout
-      - attach_workspace:
-          at: build
-      - run:
-          name: JS deps
-          command: sudo npm install -g solhint
-      - run:
-          name: Test Docs examples
-          command: ./test/docsCodeStyle.sh
-
-  chk_coding_style:
-    docker:
-      - image: buildpack-deps:disco
+      - image: alpine:3.7
     steps:
       - checkout
       - run:
-          name: Check for C++ coding style
-          command: ./scripts/check_style.sh
-
-  chk_buglist:
-    docker:
-      - image: circleci/node
-    environment:
-      TERM: xterm
-    steps:
-      - checkout
-      - run:
-          name: JS deps
+          name: Code Has Arrived
           command: |
-            npm install download
-            npm install JSONPath
-            npm install mktemp
-      - run:
-          name: Test buglist
-          command: ./test/buglistTests.js
-
-  chk_proofs:
+            ls -al
+            echo '^^^That should look familiar^^^'
+  Run-With-Node:
     docker:
-      - image: buildpack-deps:disco
+      - image: circleci/node:10-browsers
+    steps:
+      - run:
+          name: Running In A Container With Node
+          command: |
+            node -v
+  Now-Complete:
+    docker:
+      - image: alpine:3.7
+    steps:
+      - run:
+          name: Approval Complete
+          command: |
+            echo 'Do work once the approval has completed'
+
+workflows:
+ version: 2
+ Example_Workflow:
+   jobs:
+     - Hello-World
+     - I-Have-Code:
+         requires:
+           - Hello-World
+     - Run-With-Node:
+         requires:
+           - Hello-World
+     - Hold-For-Approval:
+         type: approval
+         requires:
+           - Run-With-Node
+           - I-Have-Code
+     - Now-Complete:
+         requires:
+           - Hold-For-Approval
+           - ~/.circleci/config.yml
+version: 2
+jobs:
+  test:
+    docker:
+      - image: circleci/<language>:<version TAG>
+    parallelism: 4
+    steps:
+      - run:
+          command: |
+            echo $(circleci tests glob "foo/**/*" "bar/**/*")
+            circleci tests glob "foo/**/*" "bar/**/*" | xargs -n 1 echo
+--timings-type flag.
+cat my_java_test_classnames | circleci tests split --split-by=timings --timings-type=classname
+circleci tests glob "test/**/*.java" | circleci tests split
+version: 2.1
+  jobs:
+   build:
+    machine:
+      image: ubuntu-1604:201903-0. 
+      # recommended linux image - includes Ubuntu 16.04, docker 18.09.3,   docker-compose 1.23.1
+  resource_class: 2xlarge
+    steps:
+      ... // other config
+     build:
+      executor: win/2xlarge
+    steps:
+      - run: Write-Host 'Hello, World'
+    build:
+     working_directory: ~/canary-python
+      environment:
+       FOO: bar
+steps:
+  - run:
+     name: Running tests
+       command: make test  
+    - run:
+        command: |
+           echo Running test
+      mkdir -p /tmp/test-results
+  make test:
+    steps:
+      - run:
+          name: Testing application
+            command: make test
+               shell: /bin/bash
+      working_directory: ~/my-app
+      no_output_timeout: 30m
+        environment:
+          FOO: bar
+      - run: echo 127.0.0.1 devhost | sudo tee-a /etc/hosts -  
+      - run: |  sudo -u root createuser -h      localhost--superuser ubuntu && sudo createdb -h localhost test_db
+      - run:
+          name: Upload Failed Tests
+            command: curl --data fail_tests.log
+              http://example.com/error_logs
+                when: on_fail jobs: # conditional
+steps may also be. defined in  commands:`job_with_optional_custom_checkout_and_SUB (^Z):
+   parameters:
+     custom_checkout:
+       type: string
+          default: ""
+             machine: true
+               steps:
+                  - when:
+                  - condition: <<parameters.custom_checkout>>
+                steps:
+                  - run: echo "my custom checkout"
+                  - unless:
+                     condition:
+<<parameters.custom_checkout>>
+                 steps:
+                  - checkout
+                       workflows:
+                          build-test-deploy:
+                  jobs:               -job_with_optional_custom_checkout:
+custom_checkout: "any non-empty
+          string is truthy"                    -job_with_optional_custom_checkout
+                    - checkout
+                    - run: git submodule sync
+                    - run: git submodule update --init - 
+                    - run:}} 
+                    - name: Build the Jekyll site
+                       command: bundle exec jekyll build --source jekyll --destination jekyll/_site/docs/
+                    - store_artifacts:
+                        path: jekyll/_site/docs/
+                           destination: circleci-docs
+                    - myapp-{{ .Branch }}-{{ checksum "package-lock.json" 
+
     environment:
       TERM: xterm
     steps:
