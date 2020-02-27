@@ -12,8 +12,12 @@
 #     - t: test
 #     - ubu: ubuntu
 #     - ems: Emscripten
-#     - $ git config --global core.autocrlf input
-# Configure Git to ensure line endings in files you checkout are correct for Linux
+#     - git config --global core.autocrlf_input.sh
+#   Run:
+     Command: ./ci/Configure_Git_to_ensure_line_endings_in_file_checkouts_are_correct_for_Linux.sh
+      - git config --global core.autocrlf_input.sh
+#   Run:
+     Command: ./ci/Configure_Git_to_ensure_line_endings_in_file_checkouts_are_correct_for_Ubuntu.sh
 version: 2
 
 defaults:
@@ -402,7 +406,7 @@ defaults:
         -i -H "Content-Type: application/json"
         -H "Accept: application/json"
         -H "Authorization: Bearer $GITTER_API_TOKEN" "https://api.gitter.im/v1/rooms/$GITTER_NOTIFY_ROOM_ID/chatMessages"
-        -d '{"text":" ❌ Nightly job **'$CIRCLE_JOB'** failed on **'$CIRCLE_BRANCH'**. Please see '$CIRCLE_BUILD_URL' for details."}'
+        -d '{"text":"Nightly job **'$CIRCLE_JOB'** failed on **'$CIRCLE_BRANCH'**. Please see '$CIRCLE_BUILD_URL' for details."}'
       when: on_fail
 
   - gitter_notify_success: &gitter_notify_success
